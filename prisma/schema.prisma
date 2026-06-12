@@ -13,3 +13,88 @@ datasource db {
   url      = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN_CINEMA
+  OPERATOR
+  CLIENT
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  phone     String?
+  password  String?
+  avatarUrl String?
+
+  role      Role     @default(CLIENT)
+  cinemaId  String?
+  cinema    Cinema?  @relation(fields: [cinemaId], references: [id])
+  tickets   Ticket[]
+
+  profileCompleted Boolean @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Cinema {
+  id        String   @id @default(uuid())
+  name      String
+  address   String
+
+  users     User[]
+  rooms     Room[]
+
+  createdAt DateTime @default(now())
+}
+
+model Room {
+  id        String   @id @default(uuid())
+  name      String
+  capacity  Int
+  cinemaId  String
+  cinema    Cinema   @relation(fields: [cinemaId], references: [id])
+  showtimes Showtime[]
+  createdAt DateTime @default(now())
+}
+
+model Movie {
+  id        String   @id @default(uuid())
+  title     String
+  description String?
+  duration  Int
+  posterUrl String?
+  trailerUrl String?
+  rating    Float?
+  releaseDate DateTime?
+  genre     String[]
+
+  showtimes Showtime[]
+  createdAt DateTime @default(now())
+}
+
+model Showtime {
+  id        String   @id @default(uuid())
+  movieId   String
+  movie     Movie    @relation(fields: [movieId], references: [id])
+
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id])
+
+  startTime DateTime
+  tikets    Ticket[]
+  createdAt DateTime @default(now())
+}
+
+model Ticket {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  showtimeId String
+  showtime  Showtime @relation(fields: [showtimeId], references: [id])
+
+  seatNumber String
+  createdAt DateTime @default(now())
+}
