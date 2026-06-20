@@ -4,8 +4,7 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -83,7 +82,7 @@ model Showtime {
   room      Room     @relation(fields: [roomId], references: [id])
 
   startTime DateTime
-  tikets    Ticket[]
+  tickets    Ticket[]
   createdAt DateTime @default(now())
 }
 
