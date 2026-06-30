@@ -5,6 +5,8 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { EmailVerificationService } from './email-verification/email-verification.service';
+import { EmailVerificationModule } from './email-verification/email-verification.module';
 
 @Module({
   imports: [
@@ -13,9 +15,10 @@ import { PrismaModule } from './prisma/prisma.module';
     }),
     UserModule,
     AuthModule,
-    PrismaModule
+    PrismaModule,
+    EmailVerificationModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, EmailVerificationService],
 })
 export class AppModule {}
