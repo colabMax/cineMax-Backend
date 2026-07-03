@@ -41,7 +41,9 @@ export class EmailVerificationService {
     const now = new Date();
 
     if (verification.expiresAt < now) {
-      throw new BadRequestException('La verificación ha expirado')
+      await this.deleteCode(userId)
+
+      throw new BadRequestException('El código ha expirado. Solicita uno nuevo.')
     }
 
     if (verification.code !== code) {

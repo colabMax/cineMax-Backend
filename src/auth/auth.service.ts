@@ -1,11 +1,20 @@
 import { EmailVerificationService } from 'src/email-verification/email-verification.service';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateUserDto } from 'src/user/dto/create-user.dto/create-user.dto';
 import { UserService } from 'src/user/user.service';
 import { VerifyEmailDto } from 'src/email-verification/dto/verify-email-dto';
+import { EmailService } from 'src/email/email.service';
 @Injectable()
 export class AuthService {
-  constructor(private readonly userService: UserService, private emailVerificationService: EmailVerificationService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly emailVerificationService: EmailVerificationService,
+    private readonly emailService: EmailService,
+  ) {}
 
   async register(userData: CreateUserDto) {
     userData.name = userData.name.trim().replace(/\s+/g, ' ');
@@ -19,18 +28,19 @@ export class AuthService {
 
     const user = await this.userService.createLocalUser(userData);
 
-    await this.emailVerificationService.createCode(user.id);
+    const verification = await this.emailVerificationService.createCode(user.id);
+
+    await this.emailService.sendVerificationEmail(
+      user.email,
+      verification.code,
+    )
 
     return {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      createdAt: user.createdAt,
-    };
+      message: 'El usuario ha sido creado correctamente, se ha enviado un correo de verificación.'
+    }
   }
 
-  async verifyEmail( dto: VerifyEmailDto) {
-
+  async verifyEmail(dto: VerifyEmailDto) {
     dto.email = dto.email.trim().toLowerCase();
     const user = await this.userService.findByEmail(dto.email);
 
@@ -39,24 +49,23 @@ export class AuthService {
     }
 
     return this.emailVerificationService.verifyCode(user.id, dto.code);
-
   }
 
   async resendVerificationCode(email: string) {
-
     email = email.trim().toLowerCase();
     const user = await this.userService.findByEmail(email);
     if (!user) {
       throw new NotFoundException('El usuario no existe');
     }
 
-    const userVerfy = await this.userService.getEmailVerificationStatus(user.id);
+    const userVerfy = await this.userService.getEmailVerificationStatus(
+      user.id,
+    );
 
     if (userVerfy?.emailVerified) {
       throw new ConflictException('El usuario ya ha sido verificado');
     }
 
     return await this.emailVerificationService.resendCode(user.id);
-
   }
 }
