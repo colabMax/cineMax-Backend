@@ -7,6 +7,7 @@ import { UserModule } from './user/user.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { EmailVerificationService } from './email-verification/email-verification.service';
 import { EmailVerificationModule } from './email-verification/email-verification.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
@@ -16,7 +17,8 @@ import { EmailVerificationModule } from './email-verification/email-verification
     UserModule,
     AuthModule,
     PrismaModule,
-    EmailVerificationModule
+    EmailVerificationModule,
+    EmailModule
   ],
   controllers: [AppController],
   providers: [AppService, EmailVerificationService],
