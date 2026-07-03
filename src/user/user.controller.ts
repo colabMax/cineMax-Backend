@@ -13,6 +13,6 @@ export class UserController {
 
   @Post()
   createUser(@Body() userData: CreateUserDto) {
-    return this.userService.createUser(userData);
+    return this.userService.createLocalUser(userData);
   }
 }
