@@ -2,6 +2,7 @@ import { Body, Controller, Post } from '@nestjs/common';
 import { CreateUserDto } from 'src/user/dto/create-user.dto/create-user.dto';
 import { AuthService } from './auth.service';
 import { ResendVerificationCodeDto } from './dto/resendVerificationCodeDto';
+import { LoginDto } from './dto/login.dto';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -9,6 +10,11 @@ export class AuthController {
   @Post('register')
   register(@Body() dto: CreateUserDto) {
     return this.authService.register(dto);
+  }
+
+  @Post('login')
+  login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
   }
 
   @Post('verify-email')
