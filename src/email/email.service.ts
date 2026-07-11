@@ -21,7 +21,7 @@ export class EmailService {
 
 <p>Utiliza el siguiente código para verificar tu dirección de correo electrónico:</p>
 
-<h2 style="letter-spacing: 4px;">841333</h2>
+<h2 style="letter-spacing: 4px;">${code}</h2>
 
 <p>⏳ Este código es válido durante <strong>10 minutos</strong>.</p>
 

@@ -8,12 +8,16 @@ import { CreateUserDto } from 'src/user/dto/create-user.dto/create-user.dto';
 import { UserService } from 'src/user/user.service';
 import { VerifyEmailDto } from 'src/email-verification/dto/verify-email-dto';
 import { EmailService } from 'src/email/email.service';
+import { LoginDto } from './dto/login.dto';
+import * as bcrypt from 'bcrypt';
+import { JwtService } from '@nestjs/jwt';
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly emailService: EmailService,
+    private readonly jwtService: JwtService,
   ) {}
 
   async register(userData: CreateUserDto) {
@@ -38,6 +42,50 @@ export class AuthService {
     return {
       message: 'El usuario ha sido creado correctamente, se ha enviado un correo de verificación.'
     }
+  }
+
+  async login(dto: LoginDto) {
+    dto.email = dto.email.trim().toLowerCase();
+
+    const user = await this.userService.findByEmail(dto.email);
+
+    if (!user) {
+      throw new NotFoundException('El usuario no existe');
+    }
+
+    if (user.authProvider !== 'LOCAL') {
+      throw new ConflictException('El usuario no esta registrado con este método de autenticación');
+    };
+
+    if (!user.emailVerified) {
+      throw new ConflictException('El usuario no ha verificado su correo electrónico');
+    }
+
+    if (!user.password) {
+      throw new ConflictException('El usuario no tiene contraseña');
+    }
+
+    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+
+    if (!isPasswordValid) {
+      throw new ConflictException('La contraseña es incorrecta');
+    }
+
+    const accessToken = await this.generateAccessToken(user);
+
+    return {
+      accessToken,
+    }
+  }
+
+  async generateAccessToken(user: any) {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
+
+    return this.jwtService.sign(payload);
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
