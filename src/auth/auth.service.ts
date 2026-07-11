@@ -71,12 +71,6 @@ export class AuthService {
       throw new ConflictException('La contraseña es incorrecta');
     }
 
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    };
-
     const accessToken = await this.generateAccessToken(user);
 
     return {
