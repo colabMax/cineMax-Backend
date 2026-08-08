@@ -121,6 +121,8 @@ model Ticket {
   showtimeId String
   showtime  Showtime @relation(fields: [showtimeId], references: [id])
 
-  seatNumber String
+  seatNumber String 
+  @@unique([showtimeId, seatNumber])
+
   createdAt DateTime @default(now())
 }
