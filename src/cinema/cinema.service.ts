@@ -14,4 +14,12 @@ export class CinemaService {
       },
     });
   }
+
+  async getAllCinemas() {
+    return this.prisma.cinema.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      }
+    })
+  }
 }

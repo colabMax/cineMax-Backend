@@ -1,4 +1,4 @@
-import { Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { CinemaService } from './cinema.service';
 import { CreateCinemaDto } from './dto/create-cinema.dto';
 import { RolesGuard } from 'src/auth/guards/roles/roles.guard';
@@ -15,5 +15,10 @@ export class CinemaController {
   @Roles(Role.SUPER_ADMIN)
   create(@Body() createCinemaDto: CreateCinemaDto) {
     return this.cinemaService.createCinema(createCinemaDto);
+  }
+
+  @Get()
+  findAll() {
+    return this.cinemaService.getAllCinemas();
   }
 }
