@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { CinemaService } from './cinema.service';
 import { CreateCinemaDto } from './dto/create-cinema.dto';
 import { RolesGuard } from 'src/auth/guards/roles/roles.guard';
@@ -20,5 +20,10 @@ export class CinemaController {
   @Get()
   findAll() {
     return this.cinemaService.getAllCinemas();
+  }
+
+  @Get(':id')
+  findById(@Param('id') id: string) {
+    return this.cinemaService.getCinemaById(id);
   }
 }

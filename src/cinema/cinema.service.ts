@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateCinemaDto } from './dto/create-cinema.dto';
 
@@ -21,5 +21,19 @@ export class CinemaService {
         createdAt: 'desc',
       }
     })
+  }
+
+  async getCinemaById(id: string) {
+    const cinema = await this.prisma.cinema.findUnique({
+      where: {
+        id
+      }
+    })
+
+    if (!cinema) {
+      throw new NotFoundException(`Cine con id ${id} no encontrado`);
+    }
+
+    return cinema;
   }
 }
