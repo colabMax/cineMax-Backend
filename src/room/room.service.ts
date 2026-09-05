@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { CinemaService } from 'src/cinema/cinema.service';
@@ -63,4 +63,21 @@ export class RoomService {
       }
     })
   }
+
+  async findById(id: string, user: JwtPayload) {
+    const cinemaId = this.accessScopeService.getCinemaId(user);
+
+    const room = await this.prisma.room.findFirst({
+      where: {
+        id,
+        ...(cinemaId !== null && { cinemaId }),
+      }
+    })
+
+    if (!room) {
+      throw new NotFoundException('Sala no encontrada');
+    }
+    
+    return room;
+  } 
 }
