@@ -71,6 +71,7 @@ model Cinema {
 
   users     User[]
   rooms     Room[]
+  movies    Movie[]
 
   createdAt DateTime @default(now())
 }
@@ -95,6 +96,8 @@ model Movie {
   rating    Float?
   releaseDate DateTime?
   genre     String[]
+  cinemaId  String
+  cinema    Cinema   @relation(fields: [cinemaId], references: [id])
 
   showtimes Showtime[]
   createdAt DateTime @default(now())
