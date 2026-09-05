@@ -4,6 +4,7 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { CinemaService } from 'src/cinema/cinema.service';
 import { AccessScopeService } from 'src/auth/services/access-scope.service';
 import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
+import { UpdateRoomDto } from './dto/update-room.dto';
 
 @Injectable()
 export class RoomService {
@@ -79,5 +80,30 @@ export class RoomService {
     }
     
     return room;
-  } 
+  }
+
+  async update(id: string, dto: UpdateRoomDto, user: JwtPayload) {
+    const cinemaId = this.accessScopeService.getCinemaId(user);
+
+    const room = await this.prisma.room.findFirst({
+      where: {
+        id,
+        ...(cinemaId !== null && { cinemaId }),
+      }
+    });
+
+    if (!room) {
+      throw new NotFoundException('Sala no encontrada');
+    }
+
+    return this.prisma.room.update({
+      where: {
+        id
+      },
+      data: {
+        ...dto,
+      }
+    })
+
+  }
 }
