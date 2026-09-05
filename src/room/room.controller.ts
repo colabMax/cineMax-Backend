@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { RoomService } from './room.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles/roles.guard';
@@ -46,5 +46,15 @@ export class RoomController {
     @CurrentUser() user: JwtPayload
   ) {
     return this.roomService.update(id, dto, user);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
+  delete(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload
+  ) {
+    return this.roomService.delete(id, user);
   }
 }

@@ -106,4 +106,25 @@ export class RoomService {
     })
 
   }
+
+  async delete(id: string, user: JwtPayload) {
+    const cinemaId = this.accessScopeService.getCinemaId(user);
+
+    const room = await this.prisma.room.findFirst({
+      where: {
+        id, 
+        ...(cinemaId !== null && { cinemaId }),
+      }
+    })
+
+    if (!room) {
+      throw new NotFoundException('Sala no encontrada');
+    }
+
+    return this.prisma.room.delete({
+      where: {
+        id: room.id
+      }
+    })
+  }
 }
