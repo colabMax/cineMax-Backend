@@ -11,6 +11,7 @@ import { EmailModule } from './email/email.module';
 import { CinemaModule } from './cinema/cinema.module';
 import { RoomModule } from './room/room.module';
 import { MovieModule } from './movie/movie.module';
+import { ShowtimeModule } from './showtime/showtime.module';
 
 @Module({
   imports: [
@@ -24,7 +25,8 @@ import { MovieModule } from './movie/movie.module';
     EmailModule,
     CinemaModule,
     RoomModule,
-    MovieModule
+    MovieModule,
+    ShowtimeModule
   ],
   controllers: [AppController],
   providers: [AppService, EmailVerificationService],
