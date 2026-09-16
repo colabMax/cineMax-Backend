@@ -9,6 +9,9 @@ import { EmailVerificationService } from './email-verification/email-verificatio
 import { EmailVerificationModule } from './email-verification/email-verification.module';
 import { EmailModule } from './email/email.module';
 import { CinemaModule } from './cinema/cinema.module';
+import { RoomModule } from './room/room.module';
+import { MovieModule } from './movie/movie.module';
+import { ShowtimeModule } from './showtime/showtime.module';
 
 @Module({
   imports: [
@@ -20,7 +23,10 @@ import { CinemaModule } from './cinema/cinema.module';
     PrismaModule,
     EmailVerificationModule,
     EmailModule,
-    CinemaModule
+    CinemaModule,
+    RoomModule,
+    MovieModule,
+    ShowtimeModule
   ],
   controllers: [AppController],
   providers: [AppService, EmailVerificationService],
