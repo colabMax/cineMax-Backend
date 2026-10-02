@@ -8,6 +8,7 @@ import { CreateRoomDto } from './dto/create-room.dto';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 import { UpdateRoomDto } from './dto/update-room.dto';
+import { CreateRoomLayoutDto } from './dto/create-room-layout.dto';
 
 @Controller('room')
 export class RoomController {
@@ -20,6 +21,17 @@ export class RoomController {
     const cinemaId = user.role === Role.SUPER_ADMIN ? dto.cinemaId : user.cinemaId;
     if (!cinemaId) throw new BadRequestException('Seleccioná un cine');
     return this.roomService.createRoom(cinemaId, dto);
+  }
+
+  @Post(':roomId/layout')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
+  createLayout(
+    @Param('roomId') roomId: string,
+    @Body() dto: CreateRoomLayoutDto,
+    @CurrentUser() user: JwtPayload
+  ) {
+    return this.roomService.createLayout(roomId, dto, user);
   }
 
   @Get()

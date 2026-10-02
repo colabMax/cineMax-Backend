@@ -8,8 +8,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -25,32 +25,43 @@ enum AuthProvider {
   GOOGLE
 }
 
+enum RoomPositionType {
+  SEAT
+  AISLE
+}
+
+enum SeatStatus {
+  AVAILABLE
+  OUT_OF_SERVICE
+}
+
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
+  id        String  @id @default(uuid())
+  email     String  @unique
   name      String
   phone     String?
   password  String?
   avatarUrl String?
-  
-  authProvider  AuthProvider @default(LOCAL)
+
+  authProvider   AuthProvider @default(LOCAL)
   authProviderId String?
-  @@unique([authProvider, authProviderId])
 
-  role      Role     @default(CLIENT)
+  role Role @default(CLIENT)
 
-  cinemaId  String?
-  cinema    Cinema?  @relation(fields: [cinemaId], references: [id])
+  cinemaId String?
+  cinema   Cinema? @relation(fields: [cinemaId], references: [id])
 
-  tickets   Ticket[]
+  tickets Ticket[]
 
   profileCompleted Boolean @default(false)
-  emailVerified Boolean @default(false)
-  
+  emailVerified    Boolean @default(false)
+
   emailVerifications EmailVerification?
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([authProvider, authProviderId])
 }
 
 model EmailVerification {
@@ -58,74 +69,105 @@ model EmailVerification {
   code      String
   expiresAt DateTime
 
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
 
   createdAt DateTime @default(now())
 }
 
 model Cinema {
-  id        String   @id @default(uuid())
-  name      String
-  address   String
+  id      String @id @default(uuid())
+  name    String
+  address String
 
-  users     User[]
-  rooms     Room[]
-  movies    Movie[]
+  users  User[]
+  rooms  Room[]
+  movies Movie[]
 
   createdAt DateTime @default(now())
 }
 
 model Room {
-  id        String   @id @default(uuid())
+  id        String         @id @default(uuid())
   name      String
   capacity  Int
   cinemaId  String
-  cinema    Cinema   @relation(fields: [cinemaId], references: [id])
+  cinema    Cinema         @relation(fields: [cinemaId], references: [id])
   showtimes Showtime[]
+  positions RoomPosition[]
+  createdAt DateTime       @default(now())
+}
+
+model RoomPosition {
+  id     String @id @default(uuid())
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id])
+
+  row    String
+  column Int
+  type   RoomPositionType
+
+  seatId String? @unique
+  seat   Seat?   @relation(fields: [seatId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([roomId, row, column])
+}
+
+model Seat {
+  id       String        @id @default(uuid())
+  status   SeatStatus    @default(AVAILABLE)
+  position RoomPosition?
+
+  tickets Ticket[]
+
   createdAt DateTime @default(now())
 }
 
 model Movie {
-  id        String   @id @default(uuid())
-  title     String
+  id          String    @id @default(uuid())
+  title       String
   description String?
-  duration  Int
-  posterUrl String?
-  trailerUrl String?
-  rating    Float?
+  duration    Int
+  posterUrl   String?
+  trailerUrl  String?
+  rating      Float?
   releaseDate DateTime?
-  genre     String[]
-  cinemaId  String
-  cinema    Cinema   @relation(fields: [cinemaId], references: [id])
+  genre       String[]
+  cinemaId    String
+  cinema      Cinema    @relation(fields: [cinemaId], references: [id])
 
   showtimes Showtime[]
-  createdAt DateTime @default(now())
+  createdAt DateTime   @default(now())
 }
 
 model Showtime {
-  id        String   @id @default(uuid())
-  movieId   String
-  movie     Movie    @relation(fields: [movieId], references: [id])
+  id      String @id @default(uuid())
+  movieId String
+  movie   Movie  @relation(fields: [movieId], references: [id])
 
-  roomId    String
-  room      Room     @relation(fields: [roomId], references: [id])
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id])
 
   startTime DateTime
-  tickets    Ticket[]
+  tickets   Ticket[]
   createdAt DateTime @default(now())
 }
 
 model Ticket {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
   showtimeId String
-  showtime  Showtime @relation(fields: [showtimeId], references: [id])
+  showtime   Showtime @relation(fields: [showtimeId], references: [id])
 
-  seatNumber String 
-  @@unique([showtimeId, seatNumber])
+  seatId String
+  seat   Seat   @relation(fields: [seatId], references: [id])
 
   createdAt DateTime @default(now())
+
+  @@unique([showtimeId, seatId])
 }
