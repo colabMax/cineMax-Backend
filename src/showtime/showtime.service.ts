@@ -98,10 +98,10 @@ export class ShowtimeService {
     });
   }
 
-  findById(id: string, user: JwtPayload) {
+  async findById(id: string, user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
 
-    const showtime = this.prisma.showtime.findUnique({
+    const showtime = await this.prisma.showtime.findUnique({
       where: {
         id,
         ...(cinemaId !== null && { movie: { cinemaId } }),

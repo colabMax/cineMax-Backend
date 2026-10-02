@@ -1,13 +1,15 @@
-import { IsNotEmpty, IsNumber, IsString, MaxLength, Min } from "class-validator";
-
+import { IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 export class CreateRoomDto {
   @IsString()
   @IsNotEmpty()
-  @MaxLength(25, { message: 'La sala no puede tener mas de 25 caracteres' })
+  @MaxLength(25)
   name!: string;
 
-  @IsNumber()
-  @Min(1, { message: 'La capacidad debe ser mayor a 1' })
-  @IsNotEmpty()
+  @IsInt()
+  @Min(1)
   capacity!: number;
+
+  @IsOptional()
+  @IsUUID()
+  cinemaId?: string;
 }

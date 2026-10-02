@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { RoomService } from './room.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles/roles.guard';
@@ -15,9 +15,11 @@ export class RoomController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN_CINEMA)
+  @Roles(Role.ADMIN_CINEMA, Role.SUPER_ADMIN)
   create(@Body() dto: CreateRoomDto, @CurrentUser() user: JwtPayload) {
-    return this.roomService.createRoom(user.cinemaId!, dto);
+    const cinemaId = user.role === Role.SUPER_ADMIN ? dto.cinemaId : user.cinemaId;
+    if (!cinemaId) throw new BadRequestException('Seleccioná un cine');
+    return this.roomService.createRoom(cinemaId, dto);
   }
 
   @Get()

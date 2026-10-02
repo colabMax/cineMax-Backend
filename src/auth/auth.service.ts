@@ -71,7 +71,8 @@ export class AuthService {
       throw new ConflictException('La contraseña es incorrecta');
     }
 
-    const accessToken = await this.generateAccessToken(user);
+    const sessionUser = await this.userService.bootstrapSuperAdmin(user.id);
+    const accessToken = await this.generateAccessToken(sessionUser ?? user);
 
     return {
       accessToken,
@@ -115,6 +116,8 @@ export class AuthService {
       throw new ConflictException('El usuario ya ha sido verificado');
     }
 
-    return await this.emailVerificationService.resendCode(user.id);
+    const verification = await this.emailVerificationService.resendCode(user.id);
+    await this.emailService.sendVerificationEmail(user.email, verification.code);
+    return { message: 'Se ha enviado un nuevo código de verificación' };
   }
 }

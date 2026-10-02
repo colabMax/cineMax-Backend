@@ -1,3 +1,4 @@
+import { CatalogController } from './catalog/catalog.controller';
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -28,7 +29,7 @@ import { ShowtimeModule } from './showtime/showtime.module';
     MovieModule,
     ShowtimeModule
   ],
-  controllers: [AppController],
+  controllers: [AppController, CatalogController],
   providers: [AppService, EmailVerificationService],
 })
 export class AppModule {}

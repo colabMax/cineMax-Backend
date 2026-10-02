@@ -1,3 +1,4 @@
+import { VerifyEmailDto } from '../email-verification/dto/verify-email-dto';
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { CreateUserDto } from 'src/user/dto/create-user.dto/create-user.dto';
 import { AuthService } from './auth.service';
@@ -24,7 +25,7 @@ export class AuthController {
   }
 
   @Post('verify-email')
-  verifyEmail(@Body() dto: { email: string; code: string }) {
+  verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto);
   }
 

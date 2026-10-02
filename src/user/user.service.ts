@@ -13,7 +13,7 @@ export class UserService {
   ) {}
 
   async findAll() {
-    return await this.prisma.user.findMany();
+    return await this.prisma.user.findMany({ select: { id: true, name: true, email: true, role: true, cinemaId: true, emailVerified: true, cinema: { select: { id: true, name: true } } }, orderBy: { name: 'asc' } });
   }
 
   async findByEmail(email: string) {
@@ -65,12 +65,23 @@ export class UserService {
     });
   }
 
+  async bootstrapSuperAdmin(userId: string) {
+    const configuredEmail = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase();
+    const user = await this.findById(userId);
+    if (!user || !user.emailVerified || !configuredEmail || user.email.toLowerCase() !== configuredEmail) return user;
+    const existingAdmin = await this.prisma.user.findFirst({ where: { role: Role.SUPER_ADMIN } });
+    if (existingAdmin) return user;
+    return this.prisma.user.update({ where: { id: user.id }, data: { role: Role.SUPER_ADMIN, cinemaId: null } });
+  }
+
   async assignCinemaAdmin(userId: string, cinemaId: string) {
     const user = await this.findById(userId);
     
     if (!user) {
       throw new ConflictException('El usuario no existe');
     }
+
+    if (user.role === Role.SUPER_ADMIN) throw new ConflictException('No se puede reemplazar el rol de un superadministrador desde esta operación');
 
     const cinema = await this.cinemaService.getCinemaById(cinemaId);
 

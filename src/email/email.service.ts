@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { Resend } from 'resend';
 
 @Injectable()
@@ -10,8 +10,8 @@ export class EmailService {
   }
 
   async sendVerificationEmail(email: string, code: string) {
-    return await this.resend.emails.send({
-      from: 'CineMax <onboarding@resend.dev>',
+    const result = await this.resend.emails.send({
+      from: process.env.EMAIL_FROM ?? 'CineMax <onboarding@resend.dev>',
       to: email,
       subject: 'Verificación de correo',
       html: `
@@ -37,5 +37,7 @@ Si no creaste una cuenta en CineMax, puedes ignorar este correo de forma segura.
 </p>
       `,
     });
+    if (result.error) throw new ServiceUnavailableException('No pudimos enviar el correo de verificación. Revisá la configuración de Resend e intentá reenviar el código.');
+    return result.data;
   }
 }
