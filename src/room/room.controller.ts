@@ -49,6 +49,16 @@ export class RoomController {
     return this.roomService.findById(id, user);
   }
 
+  @Get(':roomId/layout')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
+  getLayout(
+    @Param('roomId') roomId: string,
+    @CurrentUser() user: JwtPayload
+  ) {
+    return this.roomService.getLayout(roomId, user);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)

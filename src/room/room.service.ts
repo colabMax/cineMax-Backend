@@ -108,6 +108,59 @@ export class RoomService {
     };
   }
 
+  async getLayout(roomId: string, user: JwtPayload) {
+    const cinemaId = this.accessScopeService.getCinemaId(user);
+
+    console.log('ROLE:', user.role);
+    console.log('USER CINEMA ID:', user.cinemaId);
+    console.log('SCOPE CINEMA ID:', cinemaId);
+    console.log('ROOM ID:', roomId);
+
+    const room = await this.prisma.room.findFirst({
+      where: {
+        id: roomId,
+        ...(cinemaId !== null && { cinemaId }),
+      },
+    });
+
+    if (!room) {
+      throw new NotFoundException('Sala no encontrada');
+    }
+
+    const positions = await this.prisma.roomPosition.findMany({
+      where: {
+        roomId,
+      },
+      include: {
+        seat: true,
+      },
+      orderBy: [
+        {
+          row: 'asc',
+        },
+        {
+          column: 'asc',
+        },
+      ],
+    });
+
+    return {
+      roomId: room.id,
+      capacity: room.capacity,
+      positions: positions.map((position) => ({
+        id: position.id,
+        seatId: position.seatId,
+        name: `${position.row}${position.column}`,
+        row: position.row,
+        column: position.column,
+        type: position.type,
+        ...(position.seat && {
+          status: position.seat.status,
+        }),
+      })),
+    };
+  }
+
   async findAll(user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
 
