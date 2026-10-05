@@ -9,6 +9,7 @@ import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { CreateRoomLayoutDto } from './dto/create-room-layout.dto';
+import { UpdateRoomLayoutDto } from './dto/update-room-layout.dto';
 
 @Controller('room')
 export class RoomController {
@@ -68,6 +69,17 @@ export class RoomController {
     @CurrentUser() user: JwtPayload
   ) {
     return this.roomService.update(id, dto, user);
+  }
+
+  @Patch(':roomId/layout')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
+  updateLayout(
+    @Param('roomId') roomId: string,
+    @Body() dto: UpdateRoomLayoutDto,
+    @CurrentUser() user: JwtPayload
+  ) {
+    return this.roomService.updateLayout(roomId, dto, user);
   }
 
   @Delete(':id')

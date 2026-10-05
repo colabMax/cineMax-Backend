@@ -11,6 +11,7 @@ import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { CreateRoomLayoutDto } from './dto/create-room-layout.dto';
 import { RoomPositionType, Prisma } from '@prisma/client';
+import { UpdateRoomLayoutDto } from './dto/update-room-layout.dto';
 
 @Injectable()
 export class RoomService {
@@ -239,6 +240,70 @@ export class RoomService {
         ...dto,
       },
     });
+  }
+
+  async updateLayout(
+    roomId: string,
+    dto: UpdateRoomLayoutDto,
+    user: JwtPayload,
+  ) {
+    const cinemaId = this.accessScopeService.getCinemaId(user);
+
+    const room = await this.prisma.room.findFirst({
+      where: {
+        id: roomId,
+        ...(cinemaId !== null && { cinemaId }),
+      },
+    });
+
+    if (!room) {
+      throw new NotFoundException('Sala no encontrada');
+    }
+
+    const seatCount = dto.positions.filter(
+      (position) => position.type === RoomPositionType.SEAT,
+    ).length;
+
+    if (seatCount > room.capacity) {
+      throw new BadRequestException(
+        `La cantidad de asientos (${seatCount}) no puede ser mayor a la capacidad de la sala (${room.capacity})`,
+      );
+    }
+
+    const coordinates = new Set<string>();
+
+    for (const position of dto.positions) {
+      const coordinate = `${position.row}-${position.column}`;
+
+      if (coordinates.has(coordinate)) {
+        throw new BadRequestException(
+          `La posición ${position.row}-${position.column} está duplicada`,
+        );
+      }
+      coordinates.add(coordinate);
+    }
+
+    const currentPositions = await this.prisma.roomPosition.findMany({
+      where: {
+        roomId,
+      },
+      include: {
+        seat: true,
+      },
+      orderBy: [
+        {
+          row: 'asc',
+        },
+        {
+          column: 'asc',
+        },
+      ],
+    });
+
+    return {
+      currentPositions,
+      newPositions: dto.positions,
+    };
   }
 
   async delete(id: string, user: JwtPayload) {
