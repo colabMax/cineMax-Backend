@@ -5,6 +5,7 @@ import { RolesGuard } from 'src/auth/guards/roles/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Role } from '@prisma/client';
 import { CreateShowtimeDto } from './dto/create-showtime.dto';
+import { CreateShowtimeBulkDto } from './dto/create-showtime-bulk.dto';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 import { UpdateShowtimeDto } from './dto/update-showtime.dto';
@@ -23,6 +24,16 @@ export class ShowtimeController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.showtimeService.create(dto, user);
+  }
+
+  @Post('bulk')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN_CINEMA, Role.SUPER_ADMIN)
+  createBulk(
+    @Body() dto: CreateShowtimeBulkDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.showtimeService.createBulk(dto, user);
   }
 
   @Get()
