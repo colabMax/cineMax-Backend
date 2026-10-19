@@ -21,7 +21,7 @@ export class CatalogController {
       where: { cinemaId: activeCinema.id }, orderBy: { title: 'asc' },
       select: { ...movieSelect, showtimes: {
         where: { startTime: { gte: new Date() } }, orderBy: { startTime: 'asc' },
-        select: { id: true, startTime: true, room: { select: { id: true, name: true } } },
+        select: { id: true, startTime: true, language: true, room: { select: { id: true, name: true } } },
       } },
     });
     return { cinemas, activeCinema, movies };
@@ -33,7 +33,7 @@ export class CatalogController {
       where: { id },
       select: { ...movieSelect, showtimes: {
         where: { startTime: { gte: new Date() } }, orderBy: { startTime: 'asc' },
-        select: { id: true, startTime: true, room: { select: { id: true, name: true } } },
+        select: { id: true, startTime: true, language: true, room: { select: { id: true, name: true } } },
       } },
     });
     if (!movie) throw new NotFoundException('Película no encontrada');

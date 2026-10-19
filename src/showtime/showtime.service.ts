@@ -54,15 +54,16 @@ export class ShowtimeService {
         movieId: dto.movieId,
         roomId: dto.roomId,
         startTime: dto.startTime,
+        ...(dto.language && { language: dto.language }),
       },
     });
   }
 
   /**
-   * Crea varias funciones de una película en una sala, en una sola transacción.
-   * Detecta superposiciones con las funciones existentes de la sala y entre las del lote
-   * (usando la duración de cada película). Con skipConflicts las saltea y las informa;
-   * sin skipConflicts rechaza el lote entero.
+   * Crea varias funciones de una película en una sola transacción. Cada una puede ir en
+   * una sala y versión distintas. Detecta superposiciones por sala, con las funciones que
+   * ya existen y entre las del lote (usando la duración de cada película). Con skipConflicts
+   * las saltea y las informa; sin skipConflicts rechaza el lote entero.
    */
   async createBulk(dto: CreateShowtimeBulkDto, user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
@@ -74,43 +75,59 @@ export class ShowtimeService {
       throw new NotFoundException('Película no encontrada');
     }
 
-    const room = await this.prisma.room.findFirst({
-      where: { id: dto.roomId, ...(cinemaId !== null && { cinemaId }) },
+    const roomIds = [...new Set(dto.items.map((item) => item.roomId))];
+    const rooms = await this.prisma.room.findMany({
+      where: { id: { in: roomIds }, cinemaId: movie.cinemaId },
+      select: { id: true, name: true },
     });
-    if (!room) {
-      throw new NotFoundException('Sala no encontrada');
+    if (rooms.length !== roomIds.length) {
+      throw new BadRequestException('Alguna de las salas no existe o no es del cine de la película');
     }
-    if (room.cinemaId !== movie.cinemaId) {
-      throw new BadRequestException('La película y la sala no pertenecen al mismo cine');
-    }
+    const roomName = new Map(rooms.map((room) => [room.id, room.name]));
 
     const minute = 60_000;
-    const requested = [...new Set(dto.startTimes.map((date) => new Date(date).getTime()))].sort((a, b) => a - b);
-    const from = new Date(requested[0] - 24 * 60 * minute);
-    const to = new Date(requested[requested.length - 1] + movie.duration * minute);
+    const seen = new Set<string>();
+    const requested = dto.items
+      .map((item) => ({ ...item, start: new Date(item.startTime).getTime() }))
+      .filter((item) => {
+        const key = `${item.roomId}|${item.start}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .sort((a, b) => a.start - b.start);
 
+    const from = new Date(requested[0].start - 24 * 60 * minute);
+    const to = new Date(requested[requested.length - 1].start + movie.duration * minute);
     const existing = await this.prisma.showtime.findMany({
-      where: { roomId: room.id, startTime: { gte: from, lte: to } },
-      select: { startTime: true, movie: { select: { title: true, duration: true } } },
+      where: { roomId: { in: roomIds }, startTime: { gte: from, lte: to } },
+      select: { roomId: true, startTime: true, movie: { select: { title: true, duration: true } } },
     });
 
     const busy = existing.map((showtime) => ({
+      roomId: showtime.roomId,
       start: showtime.startTime.getTime(),
       end: showtime.startTime.getTime() + showtime.movie.duration * minute,
       title: showtime.movie.title,
     }));
 
-    const accepted: Date[] = [];
-    const skipped: { startTime: string; reason: string }[] = [];
-    for (const start of requested) {
-      const end = start + movie.duration * minute;
-      const clash = busy.find((slot) => start < slot.end && slot.start < end);
+    const accepted: typeof requested = [];
+    const skipped: { startTime: string; roomId: string; reason: string }[] = [];
+    for (const item of requested) {
+      const end = item.start + movie.duration * minute;
+      const clash = busy.find(
+        (slot) => slot.roomId === item.roomId && item.start < slot.end && slot.start < end,
+      );
       if (clash) {
-        skipped.push({ startTime: new Date(start).toISOString(), reason: `Se superpone con ${clash.title}` });
+        skipped.push({
+          startTime: new Date(item.start).toISOString(),
+          roomId: item.roomId,
+          reason: `${roomName.get(item.roomId)}: se superpone con ${clash.title}`,
+        });
         continue;
       }
-      accepted.push(new Date(start));
-      busy.push({ start, end, title: movie.title });
+      accepted.push(item);
+      busy.push({ roomId: item.roomId, start: item.start, end, title: movie.title });
     }
 
     if (skipped.length > 0 && !dto.skipConflicts) {
@@ -122,8 +139,15 @@ export class ShowtimeService {
 
     if (accepted.length > 0) {
       await this.prisma.$transaction(
-        accepted.map((startTime) =>
-          this.prisma.showtime.create({ data: { movieId: movie.id, roomId: room.id, startTime } }),
+        accepted.map((item) =>
+          this.prisma.showtime.create({
+            data: {
+              movieId: movie.id,
+              roomId: item.roomId,
+              startTime: new Date(item.start),
+              ...(item.language && { language: item.language }),
+            },
+          }),
         ),
       );
     }
@@ -139,6 +163,7 @@ export class ShowtimeService {
       select: {
         id: true,
         startTime: true,
+        language: true,
         createdAt: true,
         movie: {
           select: {
@@ -184,6 +209,7 @@ export class ShowtimeService {
       select: {
         id: true,
         startTime: true,
+        language: true,
         createdAt: true,
         movie: {
           select: {
@@ -224,7 +250,16 @@ export class ShowtimeService {
   async update(id: string, dto: UpdateShowtimeDto, user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
 
-    await this.findById(id, user);
+    const current = await this.findById(id, user);
+
+    if (dto.roomId && dto.roomId !== current.room.id) {
+      const room = await this.prisma.room.findFirst({
+        where: { id: dto.roomId, cinemaId: current.movie.cinema.id },
+      });
+      if (!room) {
+        throw new BadRequestException('La sala no existe o no es del cine de la película');
+      }
+    }
 
     return this.prisma.showtime.update({
       where: { id },

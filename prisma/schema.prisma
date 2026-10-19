@@ -30,6 +30,12 @@ enum RoomPositionType {
   AISLE
 }
 
+enum ShowtimeLanguage {
+  SUBTITLED
+  DUBBED
+  ORIGINAL
+}
+
 enum SeatStatus {
   AVAILABLE
   OUT_OF_SERVICE
@@ -151,6 +157,8 @@ model Showtime {
   room   Room   @relation(fields: [roomId], references: [id])
 
   startTime DateTime
+  /// Versión de la función: subtitulada, doblada al castellano u original sin subtítulos.
+  language  ShowtimeLanguage @default(SUBTITLED)
   tickets   Ticket[]
   createdAt DateTime @default(now())
 }
