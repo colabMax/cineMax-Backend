@@ -51,6 +51,7 @@ export class ShowtimeService {
       data: {
         movieId: dto.movieId,
         roomId: dto.roomId,
+        price: dto.price,
         startTime: dto.startTime,
       },
     });
@@ -63,6 +64,7 @@ export class ShowtimeService {
       where: { ...(cinemaId !== null && { movie: { cinemaId } }) },
       select: {
         id: true,
+        price: true,
         startTime: true,
         createdAt: true,
         movie: {
@@ -108,6 +110,7 @@ export class ShowtimeService {
       },
       select: {
         id: true,
+        price: true,
         startTime: true,
         createdAt: true,
         movie: {

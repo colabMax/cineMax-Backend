@@ -9,9 +9,16 @@ describe('ShowtimeService', () => {
   let service: ShowtimeService;
   const prisma = {
     showtime: {
+      create: jest.fn(),
       findFirst: jest.fn(),
       updateManyAndReturn: jest.fn(),
       deleteMany: jest.fn(),
+    },
+    movie: {
+      findFirst: jest.fn(),
+    },
+    room: {
+      findFirst: jest.fn(),
     },
   };
   const cinemaAdmin: JwtPayload = {
@@ -22,9 +29,12 @@ describe('ShowtimeService', () => {
   };
 
   beforeEach(async () => {
+    prisma.showtime.create.mockReset();
     prisma.showtime.findFirst.mockReset().mockResolvedValue(null);
     prisma.showtime.updateManyAndReturn.mockReset().mockResolvedValue([]);
     prisma.showtime.deleteMany.mockReset().mockResolvedValue({ count: 0 });
+    prisma.movie.findFirst.mockReset();
+    prisma.room.findFirst.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -35,6 +45,30 @@ describe('ShowtimeService', () => {
     }).compile();
 
     service = module.get(ShowtimeService);
+  });
+
+  it('stores the administrator-set showtime price', async () => {
+    const startTime = new Date();
+    const dto = {
+      movieId: 'movie-id',
+      roomId: 'room-id',
+      price: 25.5,
+      startTime,
+    };
+    const movie = { id: dto.movieId, cinemaId: 'cinema-1' };
+    const room = { id: dto.roomId, cinemaId: 'cinema-1' };
+    const createdShowtime = { id: 'showtime-id', ...dto };
+
+    prisma.movie.findFirst.mockResolvedValue(movie);
+    prisma.room.findFirst.mockResolvedValue(room);
+    prisma.showtime.create.mockResolvedValue(createdShowtime);
+
+    await expect(service.create(dto, cinemaAdmin)).resolves.toEqual(
+      createdShowtime,
+    );
+    expect(prisma.showtime.create).toHaveBeenCalledWith({
+      data: dto,
+    });
   });
 
   it('awaits the scoped lookup and reports missing showtimes', async () => {
