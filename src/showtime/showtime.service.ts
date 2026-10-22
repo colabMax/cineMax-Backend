@@ -98,10 +98,10 @@ export class ShowtimeService {
     });
   }
 
-  findById(id: string, user: JwtPayload) {
+  async findById(id: string, user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
 
-    const showtime = this.prisma.showtime.findUnique({
+    const showtime = await this.prisma.showtime.findFirst({
       where: {
         id,
         ...(cinemaId !== null && { movie: { cinemaId } }),
@@ -149,21 +149,36 @@ export class ShowtimeService {
   async update(id: string, dto: UpdateShowtimeDto, user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
 
-    await this.findById(id, user);
-
-    return this.prisma.showtime.update({
-      where: { id },
+    const showtimes = await this.prisma.showtime.updateManyAndReturn({
+      where: {
+        id,
+        ...(cinemaId !== null && { movie: { cinemaId } }),
+      },
       data: dto,
     });
+
+    if (showtimes.length === 0) {
+      throw new NotFoundException('Showtime no encontrada');
+    }
+
+    return showtimes[0];
   }
 
   async delete(id: string, user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
+    const showtime = await this.findById(id, user);
 
-    await this.findById(id, user);
-
-    return this.prisma.showtime.delete({
-      where: { id },
+    const result = await this.prisma.showtime.deleteMany({
+      where: {
+        id,
+        ...(cinemaId !== null && { movie: { cinemaId } }),
+      },
     });
+
+    if (result.count === 0) {
+      throw new NotFoundException('Showtime no encontrada');
+    }
+
+    return showtime;
   }
 }
