@@ -1,3 +1,4 @@
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Role } from '@prisma/client';
 import { AccessScopeService } from 'src/auth/services/access-scope.service';
@@ -7,12 +8,30 @@ import { ShowtimeService } from './showtime.service';
 
 describe('ShowtimeService', () => {
   let service: ShowtimeService;
+  const tx = {
+    $queryRaw: jest.fn(),
+    showtime: {
+      findFirst: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
+    seatHold: {
+      updateMany: jest.fn(),
+      count: jest.fn(),
+    },
+    ticket: {
+      count: jest.fn(),
+    },
+    order: {
+      count: jest.fn(),
+    },
+  };
   const prisma = {
+    $transaction: jest.fn(),
     showtime: {
       create: jest.fn(),
       findFirst: jest.fn(),
-      updateManyAndReturn: jest.fn(),
-      deleteMany: jest.fn(),
+      findMany: jest.fn(),
     },
     movie: {
       findFirst: jest.fn(),
@@ -27,14 +46,31 @@ describe('ShowtimeService', () => {
     role: Role.ADMIN_CINEMA,
     cinemaId: 'cinema-1',
   };
+  const client: JwtPayload = {
+    sub: 'client-id',
+    email: 'client@example.com',
+    role: Role.CLIENT,
+    cinemaId: null,
+  };
 
   beforeEach(async () => {
-    prisma.showtime.create.mockReset();
-    prisma.showtime.findFirst.mockReset().mockResolvedValue(null);
-    prisma.showtime.updateManyAndReturn.mockReset().mockResolvedValue([]);
-    prisma.showtime.deleteMany.mockReset().mockResolvedValue({ count: 0 });
-    prisma.movie.findFirst.mockReset();
-    prisma.room.findFirst.mockReset();
+    jest.clearAllMocks();
+    tx.$queryRaw.mockResolvedValue([{ id: 'showtime-id' }]);
+    tx.showtime.findFirst.mockResolvedValue({ id: 'showtime-id' });
+    tx.showtime.update.mockResolvedValue({ id: 'showtime-id' });
+    tx.showtime.delete.mockResolvedValue({ id: 'showtime-id' });
+    tx.seatHold.updateMany.mockResolvedValue({ count: 0 });
+    tx.seatHold.count.mockResolvedValue(0);
+    tx.ticket.count.mockResolvedValue(0);
+    tx.order.count.mockResolvedValue(0);
+    prisma.$transaction.mockImplementation(
+      (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+    );
+    prisma.showtime.findFirst.mockResolvedValue({
+      id: 'showtime-id',
+      startTime: new Date(),
+    });
+    prisma.showtime.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -47,84 +83,86 @@ describe('ShowtimeService', () => {
     service = module.get(ShowtimeService);
   });
 
-  it('stores the administrator-set showtime price', async () => {
-    const startTime = new Date();
-    const dto = {
-      movieId: 'movie-id',
-      roomId: 'room-id',
-      price: 25.5,
-      startTime,
-    };
-    const movie = { id: dto.movieId, cinemaId: 'cinema-1' };
-    const room = { id: dto.roomId, cinemaId: 'cinema-1' };
-    const createdShowtime = { id: 'showtime-id', ...dto };
+  it('allows authenticated clients to list showtimes', async () => {
+    await service.findAll(client);
 
-    prisma.movie.findFirst.mockResolvedValue(movie);
-    prisma.room.findFirst.mockResolvedValue(room);
-    prisma.showtime.create.mockResolvedValue(createdShowtime);
-
-    await expect(service.create(dto, cinemaAdmin)).resolves.toEqual(
-      createdShowtime,
+    expect(prisma.showtime.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: {} }),
     );
-    expect(prisma.showtime.create).toHaveBeenCalledWith({
-      data: dto,
-    });
   });
 
-  it('awaits the scoped lookup and reports missing showtimes', async () => {
-    await expect(service.findById('showtime-id', cinemaAdmin)).rejects.toThrow(
-      'Showtime no encontrada',
+  it('allows authenticated clients to read an individual showtime', async () => {
+    await service.findById('showtime-id', client);
+
+    expect(prisma.showtime.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'showtime-id' } }),
     );
+  });
+
+  it('keeps showtime reads scoped to the cinema administrator', async () => {
+    await service.findById('showtime-id', cinemaAdmin);
 
     expect(prisma.showtime.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: {
-          id: 'showtime-id',
-          movie: { cinemaId: 'cinema-1' },
-        },
+        where: { id: 'showtime-id', movie: { cinemaId: 'cinema-1' } },
       }),
     );
   });
 
   it('does not update a showtime outside the administrator cinema', async () => {
-    const startTime = new Date();
+    tx.showtime.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.update('showtime-id', { startTime }, cinemaAdmin),
-    ).rejects.toThrow('Showtime no encontrada');
+      service.update('showtime-id', { startTime: new Date() }, cinemaAdmin),
+    ).rejects.toThrow(NotFoundException);
 
-    expect(prisma.showtime.updateManyAndReturn).toHaveBeenCalledWith({
-      where: {
-        id: 'showtime-id',
-        movie: { cinemaId: 'cinema-1' },
-      },
-      data: { startTime },
+    expect(tx.showtime.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['tickets', 1, 0],
+    ['active holds', 0, 1],
+  ])('does not update a showtime with %s', async (_reason, tickets, holds) => {
+    tx.ticket.count.mockResolvedValue(tickets);
+    tx.seatHold.count.mockResolvedValue(holds);
+
+    await expect(
+      service.update('showtime-id', { startTime: new Date() }, cinemaAdmin),
+    ).rejects.toThrow(ConflictException);
+
+    expect(tx.showtime.update).not.toHaveBeenCalled();
+  });
+
+  it('updates a showtime only after locking it and checking active reservations', async () => {
+    const dto = { startTime: new Date() };
+
+    await service.update('showtime-id', dto, cinemaAdmin);
+
+    expect(tx.$queryRaw).toHaveBeenCalled();
+    expect(tx.seatHold.updateMany).toHaveBeenCalled();
+    expect(tx.showtime.update).toHaveBeenCalledWith({
+      where: { id: 'showtime-id' },
+      data: dto,
     });
   });
 
-  it('does not delete a showtime outside the administrator cinema', async () => {
+  it('preserves showtime history instead of deleting referenced records', async () => {
+    tx.order.count.mockResolvedValue(1);
+
     await expect(service.delete('showtime-id', cinemaAdmin)).rejects.toThrow(
-      'Showtime no encontrada',
+      ConflictException,
     );
 
-    expect(prisma.showtime.findFirst).toHaveBeenCalled();
-    expect(prisma.showtime.deleteMany).not.toHaveBeenCalled();
+    expect(tx.showtime.delete).not.toHaveBeenCalled();
   });
 
-  it('deletes only within the administrator cinema', async () => {
-    const showtime = { id: 'showtime-id' };
-    prisma.showtime.findFirst.mockResolvedValue(showtime);
-    prisma.showtime.deleteMany.mockResolvedValue({ count: 1 });
+  it('deletes a showtime with no orders, holds, or tickets', async () => {
+    await expect(service.delete('showtime-id', cinemaAdmin)).resolves.toEqual({
+      id: 'showtime-id',
+    });
 
-    await expect(service.delete('showtime-id', cinemaAdmin)).resolves.toEqual(
-      showtime,
-    );
-
-    expect(prisma.showtime.deleteMany).toHaveBeenCalledWith({
-      where: {
-        id: 'showtime-id',
-        movie: { cinemaId: 'cinema-1' },
-      },
+    expect(tx.showtime.delete).toHaveBeenCalledWith({
+      where: { id: 'showtime-id' },
     });
   });
 });

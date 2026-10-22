@@ -12,6 +12,7 @@ import { CinemaModule } from './cinema/cinema.module';
 import { RoomModule } from './room/room.module';
 import { MovieModule } from './movie/movie.module';
 import { ShowtimeModule } from './showtime/showtime.module';
+import { OrderModule } from './order/order.module';
 
 @Module({
   imports: [
@@ -26,7 +27,8 @@ import { ShowtimeModule } from './showtime/showtime.module';
     CinemaModule,
     RoomModule,
     MovieModule,
-    ShowtimeModule
+    ShowtimeModule,
+    OrderModule,
   ],
   controllers: [AppController],
   providers: [AppService, EmailVerificationService],

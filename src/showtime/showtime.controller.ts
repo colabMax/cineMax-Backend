@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ShowtimeService } from './showtime.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles/roles.guard';
@@ -11,36 +19,26 @@ import { UpdateShowtimeDto } from './dto/update-showtime.dto';
 
 @Controller('showtime')
 export class ShowtimeController {
-  constructor(
-    private readonly showtimeService: ShowtimeService,
-  ) {}
+  constructor(private readonly showtimeService: ShowtimeService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN_CINEMA, Role.SUPER_ADMIN)
-  create(
-    @Body() dto: CreateShowtimeDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
+  create(@Body() dto: CreateShowtimeDto, @CurrentUser() user: JwtPayload) {
     return this.showtimeService.create(dto, user);
   }
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
-  findAll(
-    @CurrentUser() user: JwtPayload,
-  ) {
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA, Role.CLIENT)
+  findAll(@CurrentUser() user: JwtPayload) {
     return this.showtimeService.findAll(user);
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
-  findById(
-    @CurrentUser() user: JwtPayload,
-    @Param('id') id: string,
-  ) {
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA, Role.CLIENT)
+  findById(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
     return this.showtimeService.findById(id, user);
   }
 
