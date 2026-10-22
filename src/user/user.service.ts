@@ -13,7 +13,21 @@ export class UserService {
   ) {}
 
   async findAll() {
-    return await this.prisma.user.findMany();
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        avatarUrl: true,
+        role: true,
+        cinemaId: true,
+        profileCompleted: true,
+        emailVerified: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
   }
 
   async findByEmail(email: string) {
