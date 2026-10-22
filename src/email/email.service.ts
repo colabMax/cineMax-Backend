@@ -11,7 +11,7 @@ export class EmailService {
 
   async sendVerificationEmail(email: string, code: string) {
     return await this.resend.emails.send({
-      from: 'CineMax <onboarding@resend.dev>',
+      from: process.env.EMAIL_FROM ?? 'CineMax <onboarding@resend.dev>',
       to: email,
       subject: 'Verificación de correo',
       html: `
