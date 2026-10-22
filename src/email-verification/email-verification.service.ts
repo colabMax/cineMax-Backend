@@ -81,7 +81,6 @@ export class EmailVerificationService {
     const newCode = await this.createCode(userId)
 
     return {
-      message: 'Se ha enviado un nuevo código de verificación',
       code: newCode.code,
       expiresAt: newCode.expiresAt
     }
