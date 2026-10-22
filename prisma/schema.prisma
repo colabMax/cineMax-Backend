@@ -35,6 +35,33 @@ enum SeatStatus {
   OUT_OF_SERVICE
 }
 
+enum TicketStatus {
+  PAID
+  USED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  REQUIRES_REVIEW
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  REFUNDED
+  CHARGED_BACK
+}
+
+enum SeatHoldStatus {
+  PENDING
+  EXPIRED
+  CONVERTED
+}
+
 model User {
   id        String  @id @default(uuid())
   email     String  @unique
@@ -51,7 +78,9 @@ model User {
   cinemaId String?
   cinema   Cinema? @relation(fields: [cinemaId], references: [id])
 
-  tickets Ticket[]
+  tickets          Ticket[]
+  orders           Order[]
+  validatedTickets Ticket[] @relation("TicketValidatedBy")
 
   profileCompleted Boolean @default(false)
   emailVerified    Boolean @default(false)
@@ -122,6 +151,8 @@ model Seat {
 
   tickets Ticket[]
 
+  seatHolds SeatHold[]
+
   createdAt DateTime @default(now())
 }
 
@@ -150,6 +181,10 @@ model Showtime {
   roomId String
   room   Room   @relation(fields: [roomId], references: [id])
 
+  orders    Order[]
+  seatHolds SeatHold[]
+
+  price     Decimal  @db.Decimal(10, 2)
   startTime DateTime
   tickets   Ticket[]
   createdAt DateTime @default(now())
@@ -157,6 +192,9 @@ model Showtime {
 
 model Ticket {
   id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
@@ -167,7 +205,68 @@ model Ticket {
   seatId String
   seat   Seat   @relation(fields: [seatId], references: [id])
 
+  price  Decimal      @db.Decimal(10, 2)
+  code   String       @unique
+  status TicketStatus @default(PAID)
+
+  usedAt        DateTime?
+  validatedById String?
+  validatedBy   User?     @relation("TicketValidatedBy", fields: [validatedById], references: [id], onDelete: Restrict)
+
   createdAt DateTime @default(now())
 
   @@unique([showtimeId, seatId])
+  @@index([orderId])
+  @@index([userId, status])
+}
+
+model Order {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  showtimeId String
+  showtime   Showtime @relation(fields: [showtimeId], references: [id])
+
+  totalAmount Decimal @db.Decimal(10, 2)
+  currency    String  @default("BRL")
+
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  externalReference String  @unique
+  paymentId         String? @unique
+
+  seatHolds SeatHold[]
+  tickets   Ticket[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([showtimeId, status])
+}
+
+model SeatHold {
+  id String @id @default(uuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id])
+
+  showtimeId String
+  showtime   Showtime @relation(fields: [showtimeId], references: [id])
+
+  seatId String
+  seat   Seat   @relation(fields: [seatId], references: [id])
+
+  price     Decimal        @db.Decimal(10, 2)
+  status    SeatHoldStatus @default(PENDING)
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([showtimeId, seatId, status, expiresAt])
+  @@index([orderId])
 }
