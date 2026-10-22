@@ -12,6 +12,7 @@ import { UpdateRoomDto } from './dto/update-room.dto';
 import { CreateRoomLayoutDto } from './dto/create-room-layout.dto';
 import { RoomPositionType, Prisma } from '@prisma/client';
 import { UpdateRoomLayoutDto } from './dto/update-room-layout.dto';
+import { RoomPositionDto } from './dto/room-position.dto';
 
 @Injectable()
 export class RoomService {
@@ -300,9 +301,211 @@ export class RoomService {
       ],
     });
 
+    type CurrentPosition = (typeof currentPositions)[number];
+
+    const currentMap = new Map(
+      currentPositions.map((position) => [
+        `${position.row}-${position.column}`,
+        position,
+      ]),
+    );
+
+    const newMap = new Map(
+      dto.positions.map((position) => [
+        `${position.row}-${position.column}`,
+        position,
+      ]),
+    );
+
+    const positionsToCreate: RoomPositionDto[] = [];
+    const positionsToDelete: CurrentPosition[] = [];
+    const positionsToKeep: CurrentPosition[] = [];
+    const positionsToChange: {
+      current: CurrentPosition;
+      new: RoomPositionDto;
+    }[] = [];
+
+    for (const [coordinate, newPosition] of newMap) {
+      const currentPosition = currentMap.get(coordinate);
+
+      if (!currentPosition) {
+        positionsToCreate.push(newPosition);
+        continue;
+      }
+
+      if (currentPosition.type !== newPosition.type) {
+        positionsToChange.push({
+          current: currentPosition,
+          new: newPosition,
+        });
+        continue;
+      }
+
+      positionsToKeep.push(currentPosition);
+    }
+
+    for (const [coordinate, currentPosition] of currentMap) {
+      if (!newMap.has(coordinate)) {
+        positionsToDelete.push(currentPosition);
+      }
+    }
+
+    const seatIdsToCheck = positionsToDelete
+      .filter((position) => position.type === RoomPositionType.SEAT)
+      .map((position) => position.seatId)
+      .filter((seatId): seatId is string => seatId !== null);
+
+    const ticketsForDeletedSeats = await this.prisma.ticket.findMany({
+      where: {
+        seatId: {
+          in: seatIdsToCheck,
+        },
+      },
+    });
+
+    const seatIdsWithTickets = new Set(
+      ticketsForDeletedSeats.map((ticket) => ticket.seatId),
+    );
+
+    for (const position of positionsToDelete) {
+      if (position.type !== RoomPositionType.SEAT) {
+        continue;
+      }
+
+      if (seatIdsWithTickets.has(position.seatId!)) {
+        throw new BadRequestException(
+          `No se puede eliminar el asiento ${position.row}${position.column} porque tiene tickets asociados`,
+        );
+      }
+    }
+
+    const seatsToChangeToAisle = positionsToChange
+      .filter(
+        (position) =>
+          position.current.type === RoomPositionType.SEAT &&
+          position.new.type === RoomPositionType.AISLE,
+      )
+      .map((position) => position.current.seatId)
+      .filter((seatId): seatId is string => seatId !== null);
+
+    const ticketsForSeatsToChange = await this.prisma.ticket.findMany({
+      where: {
+        seatId: {
+          in: seatsToChangeToAisle,
+        },
+      },
+    });
+
+    const seatIdsWithTicketsToChange = new Set(
+      ticketsForSeatsToChange.map((ticket) => ticket.seatId),
+    );
+
+    for (const position of positionsToChange) {
+      if (
+        position.current.type !== RoomPositionType.SEAT ||
+        position.new.type !== RoomPositionType.AISLE
+      ) {
+        continue;
+      }
+
+      if (seatIdsWithTicketsToChange.has(position.current.seatId!)) {
+        throw new BadRequestException(
+          `No se puede convertir el asiento ${position.current.row}${position.current.column} en pasillo porque tiene tickets asociados`,
+        );
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const position of positionsToCreate) {
+        if (position.type === RoomPositionType.SEAT) {
+          const seat = await tx.seat.create({
+            data: {},
+          });
+
+          await tx.roomPosition.create({
+            data: {
+              roomId,
+              row: position.row,
+              column: position.column,
+              type: position.type,
+              seatId: seat.id,
+            },
+          });
+        } else {
+          await tx.roomPosition.create({
+            data: {
+              roomId,
+              row: position.row,
+              column: position.column,
+              type: position.type,
+            },
+          });
+        }
+      }
+
+      for (const position of positionsToDelete) {
+        await tx.roomPosition.delete({
+          where: {
+            id: position.id,
+          },
+        });
+
+        if (position.type === RoomPositionType.SEAT && position.seatId) {
+          await tx.seat.delete({
+            where: {
+              id: position.seatId,
+            },
+          });
+        }
+      }
+
+      for (const position of positionsToChange) {
+        if (
+          position.current.type === RoomPositionType.SEAT &&
+          position.new.type === RoomPositionType.AISLE
+        ) {
+          await tx.roomPosition.update({
+            where: {
+              id: position.current.id,
+            },
+            data: {
+              type: RoomPositionType.AISLE,
+              seatId: null,
+            },
+          });
+
+          await tx.seat.delete({
+            where: {
+              id: position.current.seatId!,
+            },
+          });
+        }
+      }
+
+      for (const position of positionsToChange) {
+        if (
+          position.current.type === RoomPositionType.AISLE &&
+          position.new.type === RoomPositionType.SEAT
+        ) {
+          const seat = await tx.seat.create({
+            data: {},
+          });
+
+          await tx.roomPosition.update({
+            where: {
+              id: position.current.id,
+            },
+            data: {
+              type: RoomPositionType.SEAT,
+              seatId: seat.id,
+            },
+          });
+        }
+      }
+    });
+
     return {
-      currentPositions,
-      newPositions: dto.positions,
+      message: 'Layout actualizado correctamente',
     };
   }
 
