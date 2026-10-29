@@ -10,8 +10,9 @@ import { AccessScopeService } from 'src/auth/services/access-scope.service';
 import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { CreateRoomLayoutDto } from './dto/create-room-layout.dto';
-import { RoomPositionType, Prisma } from '@prisma/client';
+import { RoomPositionType } from '@prisma/client';
 import { UpdateRoomLayoutDto } from './dto/update-room-layout.dto';
+import { RoomPositionDto } from './dto/room-position.dto';
 
 @Injectable()
 export class RoomService {
@@ -110,12 +111,7 @@ export class RoomService {
   }
 
   async getLayout(roomId: string, user: JwtPayload) {
-    const cinemaId = this.accessScopeService.getCinemaId(user);
-
-    console.log('ROLE:', user.role);
-    console.log('USER CINEMA ID:', user.cinemaId);
-    console.log('SCOPE CINEMA ID:', cinemaId);
-    console.log('ROOM ID:', roomId);
+    const cinemaId = this.accessScopeService.getCinemaIdForRead(user);
 
     const room = await this.prisma.room.findFirst({
       where: {
@@ -248,28 +244,6 @@ export class RoomService {
     user: JwtPayload,
   ) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
-
-    const room = await this.prisma.room.findFirst({
-      where: {
-        id: roomId,
-        ...(cinemaId !== null && { cinemaId }),
-      },
-    });
-
-    if (!room) {
-      throw new NotFoundException('Sala no encontrada');
-    }
-
-    const seatCount = dto.positions.filter(
-      (position) => position.type === RoomPositionType.SEAT,
-    ).length;
-
-    if (seatCount > room.capacity) {
-      throw new BadRequestException(
-        `La cantidad de asientos (${seatCount}) no puede ser mayor a la capacidad de la sala (${room.capacity})`,
-      );
-    }
-
     const coordinates = new Set<string>();
 
     for (const position of dto.positions) {
@@ -283,26 +257,244 @@ export class RoomService {
       coordinates.add(coordinate);
     }
 
-    const currentPositions = await this.prisma.roomPosition.findMany({
-      where: {
-        roomId,
-      },
-      include: {
-        seat: true,
-      },
-      orderBy: [
-        {
-          row: 'asc',
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "Room" WHERE "id" = ${roomId} FOR UPDATE
+      `;
+
+      const room = await tx.room.findFirst({
+        where: {
+          id: roomId,
+          ...(cinemaId !== null && { cinemaId }),
         },
-        {
-          column: 'asc',
+      });
+
+      if (!room) {
+        throw new NotFoundException('Sala no encontrada');
+      }
+
+      const seatCount = dto.positions.filter(
+        (position) => position.type === RoomPositionType.SEAT,
+      ).length;
+
+      if (seatCount > room.capacity) {
+        throw new BadRequestException(
+          `La cantidad de asientos (${seatCount}) no puede ser mayor a la capacidad de la sala (${room.capacity})`,
+        );
+      }
+
+      const currentPositions = await tx.roomPosition.findMany({
+        where: { roomId },
+        include: { seat: true },
+        orderBy: [{ row: 'asc' }, { column: 'asc' }],
+      });
+
+      type CurrentPosition = (typeof currentPositions)[number];
+      const currentMap = new Map(
+        currentPositions.map((position) => [
+          `${position.row}-${position.column}`,
+          position,
+        ]),
+      );
+      const newMap = new Map(
+        dto.positions.map((position) => [
+          `${position.row}-${position.column}`,
+          position,
+        ]),
+      );
+      const positionsToCreate: RoomPositionDto[] = [];
+      const positionsToDelete: CurrentPosition[] = [];
+      const positionsToChange: {
+        current: CurrentPosition;
+        new: RoomPositionDto;
+      }[] = [];
+
+      for (const [coordinate, newPosition] of newMap) {
+        const currentPosition = currentMap.get(coordinate);
+
+        if (!currentPosition) {
+          positionsToCreate.push(newPosition);
+        } else if (currentPosition.type !== newPosition.type) {
+          positionsToChange.push({
+            current: currentPosition,
+            new: newPosition,
+          });
+        }
+      }
+
+      for (const [coordinate, currentPosition] of currentMap) {
+        if (!newMap.has(coordinate)) {
+          positionsToDelete.push(currentPosition);
+        }
+      }
+
+      const affectedSeatIds = [
+        ...positionsToDelete
+          .filter((position) => position.type === RoomPositionType.SEAT)
+          .map((position) => position.seatId),
+        ...positionsToChange
+          .filter(
+            (position) =>
+              position.current.type === RoomPositionType.SEAT &&
+              position.new.type === RoomPositionType.AISLE,
+          )
+          .map((position) => position.current.seatId),
+      ].filter((seatId): seatId is string => seatId !== null);
+      const uniqueAffectedSeatIds = [...new Set(affectedSeatIds)];
+      const now = new Date();
+
+      const tickets = await tx.ticket.findMany({
+        where: { seatId: { in: uniqueAffectedSeatIds } },
+        select: { seatId: true },
+      });
+      const seatIdsWithTickets = new Set(
+        tickets.map((ticket) => ticket.seatId),
+      );
+
+      for (const position of [
+        ...positionsToDelete,
+        ...positionsToChange.map((item) => item.current),
+      ]) {
+        if (
+          position.type === RoomPositionType.SEAT &&
+          position.seatId &&
+          seatIdsWithTickets.has(position.seatId)
+        ) {
+          throw new BadRequestException(
+            `No se puede retirar el asiento ${position.row}${position.column} porque tiene tickets asociados`,
+          );
+        }
+      }
+
+      await tx.seatHold.updateMany({
+        where: {
+          seatId: { in: uniqueAffectedSeatIds },
+          status: 'PENDING',
+          expiresAt: { lte: now },
         },
-      ],
+        data: { status: 'EXPIRED' },
+      });
+
+      const activeHolds = await tx.seatHold.findMany({
+        where: {
+          seatId: { in: uniqueAffectedSeatIds },
+          status: 'PENDING',
+          expiresAt: { gt: now },
+          showtime: { startTime: { gt: now } },
+        },
+        select: { seatId: true },
+      });
+
+      if (activeHolds.length > 0) {
+        throw new BadRequestException(
+          'No se puede modificar el layout mientras haya reservas activas para esos asientos',
+        );
+      }
+
+      const historicalHolds = await tx.seatHold.findMany({
+        where: { seatId: { in: uniqueAffectedSeatIds } },
+        select: { seatId: true },
+      });
+      const seatIdsWithHolds = new Set(
+        historicalHolds.map((hold) => hold.seatId),
+      );
+
+      for (const position of positionsToCreate) {
+        if (position.type === RoomPositionType.SEAT) {
+          const seat = await tx.seat.create({
+            data: {},
+          });
+
+          await tx.roomPosition.create({
+            data: {
+              roomId,
+              row: position.row,
+              column: position.column,
+              type: position.type,
+              seatId: seat.id,
+            },
+          });
+        } else {
+          await tx.roomPosition.create({
+            data: {
+              roomId,
+              row: position.row,
+              column: position.column,
+              type: position.type,
+            },
+          });
+        }
+      }
+
+      for (const position of positionsToDelete) {
+        await tx.roomPosition.delete({
+          where: {
+            id: position.id,
+          },
+        });
+
+        if (
+          position.type === RoomPositionType.SEAT &&
+          position.seatId &&
+          !seatIdsWithHolds.has(position.seatId)
+        ) {
+          await tx.seat.delete({
+            where: {
+              id: position.seatId,
+            },
+          });
+        }
+      }
+
+      for (const position of positionsToChange) {
+        if (
+          position.current.type === RoomPositionType.SEAT &&
+          position.new.type === RoomPositionType.AISLE
+        ) {
+          await tx.roomPosition.update({
+            where: {
+              id: position.current.id,
+            },
+            data: {
+              type: RoomPositionType.AISLE,
+              seatId: null,
+            },
+          });
+
+          if (!seatIdsWithHolds.has(position.current.seatId!)) {
+            await tx.seat.delete({
+              where: {
+                id: position.current.seatId!,
+              },
+            });
+          }
+        }
+      }
+
+      for (const position of positionsToChange) {
+        if (
+          position.current.type === RoomPositionType.AISLE &&
+          position.new.type === RoomPositionType.SEAT
+        ) {
+          const seat = await tx.seat.create({
+            data: {},
+          });
+
+          await tx.roomPosition.update({
+            where: {
+              id: position.current.id,
+            },
+            data: {
+              type: RoomPositionType.SEAT,
+              seatId: seat.id,
+            },
+          });
+        }
+      }
     });
 
     return {
-      currentPositions,
-      newPositions: dto.positions,
+      message: 'Layout actualizado correctamente',
     };
   }
 

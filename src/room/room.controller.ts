@@ -1,4 +1,14 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { RoomService } from './room.service';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles/roles.guard';
@@ -30,7 +40,7 @@ export class RoomController {
   createLayout(
     @Param('roomId') roomId: string,
     @Body() dto: CreateRoomLayoutDto,
-    @CurrentUser() user: JwtPayload
+    @CurrentUser() user: JwtPayload,
   ) {
     return this.roomService.createLayout(roomId, dto, user);
   }
@@ -45,20 +55,14 @@ export class RoomController {
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
-  findById(
-    @Param('id') id: string,
-    @CurrentUser() user: JwtPayload
-  ) {
+  findById(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.roomService.findById(id, user);
   }
 
   @Get(':roomId/layout')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
-  getLayout(
-    @Param('roomId') roomId: string,
-    @CurrentUser() user: JwtPayload
-  ) {
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA, Role.CLIENT)
+  getLayout(@Param('roomId') roomId: string, @CurrentUser() user: JwtPayload) {
     return this.roomService.getLayout(roomId, user);
   }
 
@@ -68,7 +72,7 @@ export class RoomController {
   update(
     @Param('id') id: string,
     @Body() dto: UpdateRoomDto,
-    @CurrentUser() user: JwtPayload
+    @CurrentUser() user: JwtPayload,
   ) {
     return this.roomService.update(id, dto, user);
   }
@@ -79,7 +83,7 @@ export class RoomController {
   updateLayout(
     @Param('roomId') roomId: string,
     @Body() dto: UpdateRoomLayoutDto,
-    @CurrentUser() user: JwtPayload
+    @CurrentUser() user: JwtPayload,
   ) {
     return this.roomService.updateLayout(roomId, dto, user);
   }
@@ -87,10 +91,7 @@ export class RoomController {
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
-  delete(
-    @Param('id') id: string,
-    @CurrentUser() user: JwtPayload
-  ) {
+  delete(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
     return this.roomService.delete(id, user);
   }
 }

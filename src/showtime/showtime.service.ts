@@ -53,6 +53,7 @@ export class ShowtimeService {
       data: {
         movieId: dto.movieId,
         roomId: dto.roomId,
+        price: dto.price,
         startTime: dto.startTime,
         ...(dto.language && { language: dto.language }),
       },
@@ -144,6 +145,7 @@ export class ShowtimeService {
             data: {
               movieId: movie.id,
               roomId: item.roomId,
+              price: item.price ?? dto.price,
               startTime: new Date(item.start),
               ...(item.language && { language: item.language }),
             },
@@ -156,12 +158,13 @@ export class ShowtimeService {
   }
 
   findAll(user: JwtPayload) {
-    const cinemaId = this.accessScopeService.getCinemaId(user);
+    const cinemaId = this.accessScopeService.getCinemaIdForRead(user);
 
     return this.prisma.showtime.findMany({
       where: { ...(cinemaId !== null && { movie: { cinemaId } }) },
       select: {
         id: true,
+        price: true,
         startTime: true,
         language: true,
         createdAt: true,
@@ -180,8 +183,8 @@ export class ShowtimeService {
               select: {
                 id: true,
                 name: true,
-              }
-            }
+              },
+            },
           },
         },
         room: {
@@ -199,15 +202,16 @@ export class ShowtimeService {
   }
 
   async findById(id: string, user: JwtPayload) {
-    const cinemaId = this.accessScopeService.getCinemaId(user);
+    const cinemaId = this.accessScopeService.getCinemaIdForRead(user);
 
-    const showtime = await this.prisma.showtime.findUnique({
+    const showtime = await this.prisma.showtime.findFirst({
       where: {
         id,
         ...(cinemaId !== null && { movie: { cinemaId } }),
       },
       select: {
         id: true,
+        price: true,
         startTime: true,
         language: true,
         createdAt: true,
@@ -226,8 +230,8 @@ export class ShowtimeService {
               select: {
                 id: true,
                 name: true,
-              }
-            }
+              },
+            },
           },
         },
         room: {
@@ -250,30 +254,114 @@ export class ShowtimeService {
   async update(id: string, dto: UpdateShowtimeDto, user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
 
-    const current = await this.findById(id, user);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "Showtime" WHERE "id" = ${id} FOR UPDATE
+      `;
 
-    if (dto.roomId && dto.roomId !== current.room.id) {
-      const room = await this.prisma.room.findFirst({
-        where: { id: dto.roomId, cinemaId: current.movie.cinema.id },
+      const showtime = await tx.showtime.findFirst({
+        where: {
+          id,
+          ...(cinemaId !== null && { movie: { cinemaId } }),
+        },
       });
-      if (!room) {
-        throw new BadRequestException('La sala no existe o no es del cine de la película');
-      }
-    }
 
-    return this.prisma.showtime.update({
-      where: { id },
-      data: dto,
+      if (!showtime) {
+        throw new NotFoundException('Showtime no encontrada');
+      }
+
+      if (dto.roomId && dto.roomId !== showtime.roomId) {
+        const movie = await tx.movie.findUnique({
+          where: { id: showtime.movieId },
+          select: { cinemaId: true },
+        });
+        const room = await tx.room.findFirst({
+          where: { id: dto.roomId, cinemaId: movie?.cinemaId },
+        });
+        if (!room) {
+          throw new BadRequestException(
+            'La sala no existe o no es del cine de la película',
+          );
+        }
+      }
+
+      const now = new Date();
+      await tx.seatHold.updateMany({
+        where: {
+          showtimeId: id,
+          status: 'PENDING',
+          expiresAt: { lte: now },
+        },
+        data: { status: 'EXPIRED' },
+      });
+
+      const [ticketCount, activeHoldCount] = await Promise.all([
+        tx.ticket.count({ where: { showtimeId: id } }),
+        tx.seatHold.count({
+          where: {
+            showtimeId: id,
+            status: 'PENDING',
+            expiresAt: { gt: now },
+          },
+        }),
+      ]);
+
+      if (ticketCount > 0 || activeHoldCount > 0) {
+        throw new ConflictException(
+          'No se puede modificar una función con tickets o reservas activas',
+        );
+      }
+
+      return tx.showtime.update({
+        where: { id },
+        data: dto,
+      });
     });
   }
 
   async delete(id: string, user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
 
-    await this.findById(id, user);
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "Showtime" WHERE "id" = ${id} FOR UPDATE
+      `;
 
-    return this.prisma.showtime.delete({
-      where: { id },
+      const showtime = await tx.showtime.findFirst({
+        where: {
+          id,
+          ...(cinemaId !== null && { movie: { cinemaId } }),
+        },
+      });
+
+      if (!showtime) {
+        throw new NotFoundException('Showtime no encontrada');
+      }
+
+      const now = new Date();
+      await tx.seatHold.updateMany({
+        where: {
+          showtimeId: id,
+          status: 'PENDING',
+          expiresAt: { lte: now },
+        },
+        data: { status: 'EXPIRED' },
+      });
+
+      const [orderCount, holdCount, ticketCount] = await Promise.all([
+        tx.order.count({ where: { showtimeId: id } }),
+        tx.seatHold.count({ where: { showtimeId: id } }),
+        tx.ticket.count({ where: { showtimeId: id } }),
+      ]);
+
+      if (orderCount > 0 || holdCount > 0 || ticketCount > 0) {
+        throw new ConflictException(
+          'No se puede eliminar una función con historial de compras, reservas o tickets',
+        );
+      }
+
+      await tx.showtime.delete({ where: { id } });
+      return showtime;
     });
   }
 }

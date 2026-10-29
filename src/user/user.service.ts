@@ -13,7 +13,23 @@ export class UserService {
   ) {}
 
   async findAll() {
-    return await this.prisma.user.findMany({ select: { id: true, name: true, email: true, role: true, cinemaId: true, emailVerified: true, cinema: { select: { id: true, name: true } } }, orderBy: { name: 'asc' } });
+    return this.prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        avatarUrl: true,
+        role: true,
+        cinemaId: true,
+        profileCompleted: true,
+        emailVerified: true,
+        createdAt: true,
+        updatedAt: true,
+        cinema: { select: { id: true, name: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
   }
 
   async findByEmail(email: string) {

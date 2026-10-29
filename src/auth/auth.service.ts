@@ -116,8 +116,17 @@ export class AuthService {
       throw new ConflictException('El usuario ya ha sido verificado');
     }
 
-    const verification = await this.emailVerificationService.resendCode(user.id);
-    await this.emailService.sendVerificationEmail(user.email, verification.code);
-    return { message: 'Se ha enviado un nuevo código de verificación' };
+    const verification = await this.emailVerificationService.resendCode(
+      user.id,
+    );
+
+    await this.emailService.sendVerificationEmail(
+      user.email,
+      verification.code,
+    );
+
+    return {
+      message: 'Se ha enviado un nuevo código de verificación',
+    };
   }
 }
