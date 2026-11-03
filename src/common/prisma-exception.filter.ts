@@ -1,4 +1,4 @@
-import { ArgumentsHost, Catch, ExceptionFilter } from '@nestjs/common';
+import { ArgumentsHost, Catch, ExceptionFilter, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { Response } from 'express';
 
@@ -6,6 +6,7 @@ import type { Response } from 'express';
 export class PrismaExceptionFilter implements ExceptionFilter {
   catch(error: Prisma.PrismaClientKnownRequestError, host: ArgumentsHost) {
     const response = host.switchToHttp().getResponse<Response>();
+    new Logger('Prisma').error(`${error.code}: ${error.message}`, JSON.stringify(error.meta));
     const messages: Record<string, [number, string]> = {
       P2002: [409, 'Ya existe un registro con estos datos.'],
       P2003: [409, 'No se puede completar la operación: el registro tiene datos relacionados o la referencia ya no existe.'],
