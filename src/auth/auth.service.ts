@@ -26,13 +26,17 @@ export class AuthService {
     userData.email = userData.email.trim().toLowerCase();
     const userExists = await this.userService.findByEmail(userData.email);
 
-    if (userExists) {
+    if (userExists && (userExists.emailVerified || userExists.authProvider !== 'LOCAL')) {
       throw new ConflictException('El usuario ya existe');
     }
 
-    const user = await this.userService.createLocalUser(userData);
+    // Si ya existía pero nunca verificó (por ejemplo, falló el envío del mail),
+    // no lo bloqueamos: actualizamos sus datos y le mandamos un código nuevo.
+    const user = userExists
+      ? await this.userService.updateUnverifiedLocalUser(userExists.id, userData)
+      : await this.userService.createLocalUser(userData);
 
-    const verification = await this.emailVerificationService.createCode(user.id);
+    const verification = await this.emailVerificationService.resendCode(user.id);
 
     await this.emailService.sendVerificationEmail(
       user.email,
@@ -40,7 +44,9 @@ export class AuthService {
     )
 
     return {
-      message: 'El usuario ha sido creado correctamente, se ha enviado un correo de verificación.'
+      message: userExists
+        ? 'Tu cuenta todavía no estaba verificada. Te enviamos un código nuevo.'
+        : 'El usuario ha sido creado correctamente, se ha enviado un correo de verificación.'
     }
   }
 

@@ -56,6 +56,7 @@ export class ShowtimeService {
         price: dto.price,
         startTime: dto.startTime,
         ...(dto.language && { language: dto.language }),
+        ...(dto.format && { format: dto.format }),
       },
     });
   }
@@ -74,6 +75,10 @@ export class ShowtimeService {
     });
     if (!movie) {
       throw new NotFoundException('Película no encontrada');
+    }
+
+    if (dto.items.some((item) => item.price === undefined) && dto.price === undefined) {
+      throw new BadRequestException('Cada función necesita un precio');
     }
 
     const roomIds = [...new Set(dto.items.map((item) => item.roomId))];
@@ -145,9 +150,10 @@ export class ShowtimeService {
             data: {
               movieId: movie.id,
               roomId: item.roomId,
-              price: item.price ?? dto.price,
+              price: (item.price ?? dto.price)!,
               startTime: new Date(item.start),
               ...(item.language && { language: item.language }),
+              ...(item.format && { format: item.format }),
             },
           }),
         ),
@@ -167,6 +173,7 @@ export class ShowtimeService {
         price: true,
         startTime: true,
         language: true,
+        format: true,
         createdAt: true,
         movie: {
           select: {
@@ -214,6 +221,7 @@ export class ShowtimeService {
         price: true,
         startTime: true,
         language: true,
+        format: true,
         createdAt: true,
         movie: {
           select: {

@@ -9,7 +9,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { ShowtimeLanguage } from '@prisma/client';
+import { ShowtimeFormat, ShowtimeLanguage } from '@prisma/client';
 
 export class CreateShowtimeDto {
   @IsUUID()
@@ -33,4 +33,9 @@ export class CreateShowtimeDto {
   @IsOptional()
   @IsEnum(ShowtimeLanguage)
   language?: ShowtimeLanguage;
+
+  /** 2D por defecto. */
+  @IsOptional()
+  @IsEnum(ShowtimeFormat)
+  format?: ShowtimeFormat;
 }

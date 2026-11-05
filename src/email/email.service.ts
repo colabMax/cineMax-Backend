@@ -37,6 +37,7 @@ Si no creaste una cuenta en CineMax, puedes ignorar este correo de forma segura.
 </p>
       `,
     });
+    if (result.error) console.error('[email] Resend rechazó el envío a', email, result.error);
     if (result.error) throw new ServiceUnavailableException('No pudimos enviar el correo de verificación. Revisá la configuración de Resend e intentá reenviar el código.');
     return result.data;
   }

@@ -58,9 +58,9 @@
       message: 'La contraseña debe contener al menos un número',
     })
 
-    @Matches(/[@$!%*?&]/, {
+    @Matches(/[@$!%*?&-]/, {
       message:
-        'La contraseña debe contener al menos un carácter especial (@$!%*?&)',
+        'La contraseña debe contener al menos un carácter especial (@$!%*?&-)',
     })
     password!: string;
   }

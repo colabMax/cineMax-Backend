@@ -51,6 +51,15 @@ export class UserService {
     })
   }
 
+  /** Cuenta creada pero nunca verificada: se pisa nombre y contraseña con los del nuevo intento. */
+  async updateUnverifiedLocalUser(userId: string, userData: CreateUserDto) {
+    const hashedPassword = await bcrypt.hash(userData.password, 10);
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { name: userData.name, password: hashedPassword },
+    });
+  }
+
   async markEmailAsVerified(userId: string) {
     return this.prisma.user.update({
       where: {

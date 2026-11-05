@@ -36,6 +36,12 @@ enum ShowtimeLanguage {
   ORIGINAL
 }
 
+/// Formato de proyección de la función.
+enum ShowtimeFormat {
+  TWO_D
+  THREE_D
+}
+
 enum SeatStatus {
   AVAILABLE
   OUT_OF_SERVICE
@@ -194,6 +200,8 @@ model Showtime {
   startTime DateTime
   /// Versión de la función: subtitulada, doblada al castellano u original sin subtítulos.
   language  ShowtimeLanguage @default(SUBTITLED)
+  /// 2D o 3D.
+  format    ShowtimeFormat   @default(TWO_D)
   tickets   Ticket[]
   createdAt DateTime @default(now())
 }
