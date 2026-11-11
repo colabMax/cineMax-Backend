@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,9 +11,13 @@ import { AccessScopeService } from 'src/auth/services/access-scope.service';
 import { JwtPayload } from 'src/auth/interfaces/jwt-payload.interface';
 import { UpdateRoomDto } from './dto/update-room.dto';
 import { CreateRoomLayoutDto } from './dto/create-room-layout.dto';
-import { RoomPositionType } from '@prisma/client';
+import { Prisma, RoomPositionType } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import { UpdateRoomLayoutDto } from './dto/update-room-layout.dto';
 import { RoomPositionDto } from './dto/room-position.dto';
+
+/** Margen para guardar salas grandes contra una base remota (el valor por defecto de Prisma es 5 s). */
+const LAYOUT_TRANSACTION_OPTIONS = { maxWait: 10_000, timeout: 30_000 };
 
 @Injectable()
 export class RoomService {
@@ -76,34 +81,17 @@ export class RoomService {
       coordinates.add(coordinate);
     }
 
-    await this.prisma.$transaction(async (tx) => {
-      for (const position of dto.positions) {
-        if (position.type === RoomPositionType.SEAT) {
-          const seat = await tx.seat.create({
-            data: {},
-          });
+    const existing = await this.prisma.roomPosition.count({ where: { roomId } });
+    if (existing > 0) {
+      throw new BadRequestException(
+        'La sala ya tiene un mapa de butacas. Editalo en lugar de crearlo de nuevo.',
+      );
+    }
 
-          await tx.roomPosition.create({
-            data: {
-              roomId,
-              row: position.row,
-              column: position.column,
-              type: position.type,
-              seatId: seat.id,
-            },
-          });
-        } else {
-          await tx.roomPosition.create({
-            data: {
-              roomId,
-              row: position.row,
-              column: position.column,
-              type: position.type,
-            },
-          });
-        }
-      }
-    });
+    await this.prisma.$transaction(
+      (tx) => this.createPositions(tx, roomId, dto.positions),
+      LAYOUT_TRANSACTION_OPTIONS,
+    );
 
     return {
       message: 'Layout creado correctamente',
@@ -399,32 +387,7 @@ export class RoomService {
         historicalHolds.map((hold) => hold.seatId),
       );
 
-      for (const position of positionsToCreate) {
-        if (position.type === RoomPositionType.SEAT) {
-          const seat = await tx.seat.create({
-            data: {},
-          });
-
-          await tx.roomPosition.create({
-            data: {
-              roomId,
-              row: position.row,
-              column: position.column,
-              type: position.type,
-              seatId: seat.id,
-            },
-          });
-        } else {
-          await tx.roomPosition.create({
-            data: {
-              roomId,
-              row: position.row,
-              column: position.column,
-              type: position.type,
-            },
-          });
-        }
-      }
+      await this.createPositions(tx, roomId, positionsToCreate);
 
       for (const position of positionsToDelete) {
         await tx.roomPosition.delete({
@@ -491,7 +454,7 @@ export class RoomService {
           });
         }
       }
-    });
+    }, LAYOUT_TRANSACTION_OPTIONS);
 
     return {
       message: 'Layout actualizado correctamente',
@@ -512,10 +475,57 @@ export class RoomService {
       throw new NotFoundException('Sala no encontrada');
     }
 
-    return this.prisma.room.delete({
-      where: {
-        id: room.id,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const showtimes = await tx.showtime.count({ where: { roomId: room.id } });
+      if (showtimes > 0) {
+        throw new ConflictException(
+          'No se puede eliminar la sala porque tiene funciones programadas.',
+        );
+      }
+
+      // El mapa de butacas se borra junto con la sala (sin funciones no hay tickets ni reservas).
+      const positions = await tx.roomPosition.findMany({
+        where: { roomId: room.id },
+        select: { seatId: true },
+      });
+      const seatIds = positions
+        .map((position) => position.seatId)
+        .filter((seatId): seatId is string => seatId !== null);
+
+      await tx.roomPosition.deleteMany({ where: { roomId: room.id } });
+      if (seatIds.length > 0) {
+        await tx.seat.deleteMany({ where: { id: { in: seatIds } } });
+      }
+
+      return tx.room.delete({ where: { id: room.id } });
+    }, LAYOUT_TRANSACTION_OPTIONS);
+  }
+
+  /** Crea posiciones y butacas en lote: dos consultas en total, no dos por butaca. */
+  private async createPositions(
+    tx: Prisma.TransactionClient,
+    roomId: string,
+    positions: RoomPositionDto[],
+  ) {
+    if (positions.length === 0) return;
+
+    const seatIds: (string | null)[] = positions.map((position) =>
+      position.type === RoomPositionType.SEAT ? randomUUID() : null,
+    );
+    const newSeats = seatIds.filter((seatId): seatId is string => seatId !== null);
+
+    if (newSeats.length > 0) {
+      await tx.seat.createMany({ data: newSeats.map((seatId) => ({ id: seatId })) });
+    }
+
+    await tx.roomPosition.createMany({
+      data: positions.map((position, index) => ({
+        roomId,
+        row: position.row,
+        column: position.column,
+        type: position.type,
+        seatId: seatIds[index],
+      })),
     });
   }
 }
