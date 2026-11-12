@@ -259,6 +259,70 @@ export class ShowtimeService {
     return showtime;
   }
 
+  async getSeatMap(id: string, user: JwtPayload) {
+    const showtime = await this.findById(id, user);
+    const now = new Date();
+
+    const [positions, tickets, holds] = await Promise.all([
+      this.prisma.roomPosition.findMany({
+        where: { roomId: showtime.room.id },
+        select: {
+          row: true,
+          column: true,
+          type: true,
+          seatId: true,
+          seat: { select: { status: true } },
+        },
+        orderBy: [{ row: 'asc' }, { column: 'asc' }],
+      }),
+      this.prisma.ticket.findMany({
+        where: { showtimeId: id },
+        select: { seatId: true, status: true },
+      }),
+      this.prisma.seatHold.findMany({
+        where: { showtimeId: id, status: 'PENDING', expiresAt: { gt: now } },
+        select: { seatId: true, expiresAt: true },
+      }),
+    ]);
+
+    const soldSeats = new Map(tickets.map((ticket) => [ticket.seatId, ticket.status]));
+    const heldSeats = new Map(holds.map((hold) => [hold.seatId, hold.expiresAt]));
+    const summary = { total: 0, available: 0, held: 0, sold: 0, used: 0, outOfService: 0 };
+
+    const seats = positions.map((position) => {
+      const base = {
+        name: `${position.row}${position.column}`,
+        row: position.row,
+        column: position.column,
+        type: position.type,
+        seatId: position.seatId,
+      };
+      if (position.type !== 'SEAT' || !position.seatId) {
+        return { ...base, state: null, heldUntil: null };
+      }
+
+      summary.total += 1;
+      const ticketStatus = soldSeats.get(position.seatId);
+      const heldUntil = heldSeats.get(position.seatId) ?? null;
+      let state: 'AVAILABLE' | 'HELD' | 'SOLD' | 'USED' | 'OUT_OF_SERVICE';
+      if (ticketStatus === 'USED') state = 'USED';
+      else if (ticketStatus) state = 'SOLD';
+      else if (heldUntil) state = 'HELD';
+      else if (position.seat?.status === 'OUT_OF_SERVICE') state = 'OUT_OF_SERVICE';
+      else state = 'AVAILABLE';
+
+      if (state === 'AVAILABLE') summary.available += 1;
+      else if (state === 'HELD') summary.held += 1;
+      else if (state === 'SOLD') summary.sold += 1;
+      else if (state === 'USED') summary.used += 1;
+      else summary.outOfService += 1;
+
+      return { ...base, state, heldUntil };
+    });
+
+    return { showtime, summary, seats, generatedAt: now };
+  }
+
   async update(id: string, dto: UpdateShowtimeDto, user: JwtPayload) {
     const cinemaId = this.accessScopeService.getCinemaId(user);
 

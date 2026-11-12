@@ -53,6 +53,14 @@ export class ShowtimeController {
     return this.showtimeService.findById(id, user);
   }
 
+  /** Mapa de la sala para una función, con el estado de cada butaca (libre, reservada, vendida…). */
+  @Get(':id/seats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA, Role.CLIENT)
+  getSeatMap(@CurrentUser() user: JwtPayload, @Param('id') id: string) {
+    return this.showtimeService.getSeatMap(id, user);
+  }
+
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN, Role.ADMIN_CINEMA)
